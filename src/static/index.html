@@ -39,6 +39,28 @@
         </form>
         <div id="message" class="hidden"></div>
       </section>
+
+      <section id="attendance-container">
+        <h3>Mark Attendance</h3>
+        <div class="form-group">
+          <label for="attendance-activity">Activity:</label>
+          <select id="attendance-activity">
+            <option value="">-- Select an activity --</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="attendance-date">Date:</label>
+          <input type="date" id="attendance-date" />
+        </div>
+        <div id="attendance-checklist"></div>
+        <button id="submit-attendance" class="hidden">Save Attendance</button>
+        <div id="attendance-message" class="hidden"></div>
+
+        <div id="attendance-report-container" class="hidden">
+          <h4>Attendance Summary</h4>
+          <div id="attendance-report"></div>
+        </div>
+      </section>
     </main>
 
     <footer>

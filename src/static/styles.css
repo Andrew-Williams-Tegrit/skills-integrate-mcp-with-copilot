@@ -198,3 +198,62 @@ footer {
   padding: 20px;
   color: #666;
 }
+
+/* ── Attendance section ───────────────────────────────────────────────── */
+
+#attendance-container {
+  max-width: 500px;
+}
+
+.attendance-summary-btn {
+  margin-top: 10px;
+  background-color: #00695c;
+  font-size: 13px;
+  padding: 6px 10px;
+}
+
+.attendance-summary-btn:hover {
+  background-color: #00897b;
+}
+
+.attendance-checklist-list {
+  list-style: none;
+  padding-left: 0;
+  margin: 10px 0;
+}
+
+.attendance-checklist-list li {
+  padding: 4px 0;
+}
+
+.attendance-checklist-list label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-weight: normal;
+}
+
+.attendance-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 10px;
+  font-size: 14px;
+}
+
+.attendance-table th,
+.attendance-table td {
+  text-align: left;
+  padding: 7px 10px;
+  border-bottom: 1px solid #ddd;
+}
+
+.attendance-table thead th {
+  background-color: #e8eaf6;
+  color: #1a237e;
+  font-weight: bold;
+}
+
+.attendance-table tbody tr:hover {
+  background-color: #f5f5f5;
+}
