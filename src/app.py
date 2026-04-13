@@ -5,9 +5,12 @@ A super simple FastAPI application that allows students to view and sign up
 for extracurricular activities at Mergington High School.
 """
 
-from fastapi import FastAPI, HTTPException
+from datetime import date
+from typing import Annotated
+from fastapi import Depends, FastAPI, Header, HTTPException, status
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import RedirectResponse
+from pydantic import BaseModel, Field, model_validator
 import os
 from pathlib import Path
 
@@ -77,6 +80,53 @@ activities = {
     }
 }
 
+ADMIN_NOTICE_TOKEN = os.getenv("ADMIN_NOTICE_TOKEN", "teacher-admin-token")
+
+
+class NoticePayload(BaseModel):
+    title: str = Field(min_length=1)
+    body: str = Field(min_length=1)
+    start_date: date
+    end_date: date
+    link: str | None = None
+
+    @model_validator(mode="after")
+    def validate_date_window(self):
+        if self.end_date < self.start_date:
+            raise ValueError("end_date must be on or after start_date")
+        return self
+
+
+notices = {
+    1: {
+        "title": "Spring break office hours",
+        "body": "Guidance office hours are reduced this week.",
+        "start_date": date(2026, 4, 1),
+        "end_date": date(2026, 4, 30),
+        "link": None,
+    }
+}
+next_notice_id = 2
+
+
+def require_notice_admin(
+    x_admin_token: Annotated[str | None, Header()] = None,
+):
+    if x_admin_token != ADMIN_NOTICE_TOKEN:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin permissions required",
+        )
+
+
+def is_notice_active(notice: dict, current_date: date | None = None) -> bool:
+    check_date = current_date or date.today()
+    return notice["start_date"] <= check_date <= notice["end_date"]
+
+
+def format_notice(notice_id: int, notice: dict) -> dict:
+    return {"id": notice_id, **notice}
+
 
 @app.get("/")
 def root():
@@ -130,3 +180,53 @@ def unregister_from_activity(activity_name: str, email: str):
     # Remove student
     activity["participants"].remove(email)
     return {"message": f"Unregistered {email} from {activity_name}"}
+
+
+@app.get("/notices")
+def get_active_notices():
+    active_notices = [
+        format_notice(notice_id, notice)
+        for notice_id, notice in notices.items()
+        if is_notice_active(notice)
+    ]
+    return sorted(active_notices, key=lambda notice: (notice["start_date"], notice["id"]))
+
+
+@app.get("/admin/notices", dependencies=[Depends(require_notice_admin)])
+def get_all_notices():
+    all_notices = [
+        format_notice(notice_id, notice)
+        for notice_id, notice in notices.items()
+    ]
+    return sorted(all_notices, key=lambda notice: (notice["start_date"], notice["id"]))
+
+
+@app.post(
+    "/admin/notices",
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_notice_admin)],
+)
+def create_notice(notice: NoticePayload):
+    global next_notice_id
+    notices[next_notice_id] = notice.model_dump()
+    created_notice = format_notice(next_notice_id, notices[next_notice_id])
+    next_notice_id += 1
+    return created_notice
+
+
+@app.put("/admin/notices/{notice_id}", dependencies=[Depends(require_notice_admin)])
+def update_notice(notice_id: int, notice: NoticePayload):
+    if notice_id not in notices:
+        raise HTTPException(status_code=404, detail="Notice not found")
+
+    notices[notice_id] = notice.model_dump()
+    return format_notice(notice_id, notices[notice_id])
+
+
+@app.delete("/admin/notices/{notice_id}", dependencies=[Depends(require_notice_admin)])
+def delete_notice(notice_id: int):
+    if notice_id not in notices:
+        raise HTTPException(status_code=404, detail="Notice not found")
+
+    notices.pop(notice_id)
+    return {"message": "Notice deleted"}
