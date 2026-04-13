@@ -5,9 +5,12 @@ A super simple FastAPI application that allows students to view and sign up
 for extracurricular activities at Mergington High School.
 """
 
-from fastapi import FastAPI, HTTPException
+from datetime import date as date_type
+from typing import Optional
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import RedirectResponse
+from pydantic import BaseModel
 import os
 from pathlib import Path
 
@@ -130,3 +133,152 @@ def unregister_from_activity(activity_name: str, email: str):
     # Remove student
     activity["participants"].remove(email)
     return {"message": f"Unregistered {email} from {activity_name}"}
+
+
+# ---------------------------------------------------------------------------
+# Attendance tracking
+# ---------------------------------------------------------------------------
+# Structure: { "YYYY-MM-DD": { "Activity Name": { "email": True/False, ... } } }
+attendance_records: dict = {}
+
+
+class AttendanceInput(BaseModel):
+    present: list[str]  # list of emails that attended the session
+
+
+@app.post("/activities/{activity_name}/attendance")
+def mark_attendance(
+    activity_name: str,
+    body: AttendanceInput,
+    date: Optional[str] = Query(default=None, description="ISO date YYYY-MM-DD, defaults to today"),
+):
+    """Mark attendance for an activity session on a given date.
+
+    Only participants already signed up for the activity can be marked present.
+    Everyone else in the activity is recorded as absent.
+    """
+    if activity_name not in activities:
+        raise HTTPException(status_code=404, detail="Activity not found")
+
+    session_date = date or str(date_type.today())
+
+    # Validate that all emails in 'present' are registered participants
+    participants = set(activities[activity_name]["participants"])
+    unknown = [e for e in body.present if e not in participants]
+    if unknown:
+        raise HTTPException(
+            status_code=400,
+            detail=f"The following emails are not registered for this activity: {unknown}",
+        )
+
+    # Build attendance record: True = present, False = absent
+    record = {email: (email in body.present) for email in participants}
+
+    attendance_records.setdefault(session_date, {})[activity_name] = record
+    return {
+        "message": f"Attendance recorded for {activity_name} on {session_date}",
+        "date": session_date,
+        "present": body.present,
+        "absent": [e for e in participants if e not in body.present],
+    }
+
+
+@app.get("/activities/{activity_name}/attendance")
+def get_attendance(
+    activity_name: str,
+    start_date: Optional[str] = Query(default=None, description="Filter from date (YYYY-MM-DD, inclusive)"),
+    end_date: Optional[str] = Query(default=None, description="Filter to date (YYYY-MM-DD, inclusive)"),
+):
+    """Get attendance records for an activity, optionally filtered by date range."""
+    if activity_name not in activities:
+        raise HTTPException(status_code=404, detail="Activity not found")
+
+    sessions = []
+    for session_date, activities_on_date in sorted(attendance_records.items()):
+        if start_date and session_date < start_date:
+            continue
+        if end_date and session_date > end_date:
+            continue
+        if activity_name not in activities_on_date:
+            continue
+
+        record = activities_on_date[activity_name]
+        present = [e for e, attended in record.items() if attended]
+        absent = [e for e, attended in record.items() if not attended]
+        total = len(record)
+        sessions.append({
+            "date": session_date,
+            "present": present,
+            "absent": absent,
+            "present_count": len(present),
+            "absent_count": len(absent),
+            "attendance_rate": round(len(present) / total, 2) if total else 0,
+        })
+
+    return {"activity": activity_name, "sessions": sessions, "total_sessions": len(sessions)}
+
+
+@app.get("/activities/{activity_name}/attendance/summary")
+def get_activity_attendance_summary(activity_name: str):
+    """Return per-student attendance totals and rates for an activity."""
+    if activity_name not in activities:
+        raise HTTPException(status_code=404, detail="Activity not found")
+
+    totals: dict[str, dict] = {}
+    session_count = 0
+
+    for activities_on_date in attendance_records.values():
+        if activity_name not in activities_on_date:
+            continue
+        session_count += 1
+        for email, attended in activities_on_date[activity_name].items():
+            stats = totals.setdefault(email, {"attended": 0, "missed": 0})
+            if attended:
+                stats["attended"] += 1
+            else:
+                stats["missed"] += 1
+
+    per_student = {
+        email: {
+            **stats,
+            "total_sessions": session_count,
+            "attendance_rate": round(stats["attended"] / session_count, 2) if session_count else 0,
+        }
+        for email, stats in totals.items()
+    }
+
+    return {
+        "activity": activity_name,
+        "total_sessions": session_count,
+        "per_student": per_student,
+    }
+
+
+@app.get("/students/{email}/attendance")
+def get_student_attendance(email: str):
+    """Return attendance summary for a specific student across all activities."""
+    # Verify the student is registered in at least one activity
+    registered = [name for name, act in activities.items() if email in act["participants"]]
+    if not registered:
+        raise HTTPException(status_code=404, detail="Student not found in any activity")
+
+    summary: dict[str, dict] = {}
+
+    for session_date, activities_on_date in attendance_records.items():
+        for activity_name, record in activities_on_date.items():
+            if email not in record:
+                continue
+            stats = summary.setdefault(activity_name, {"attended": 0, "total": 0})
+            stats["total"] += 1
+            if record[email]:
+                stats["attended"] += 1
+
+    activity_summary = {
+        activity_name: {
+            **stats,
+            "attendance_rate": round(stats["attended"] / stats["total"], 2) if stats["total"] else 0,
+        }
+        for activity_name, stats in summary.items()
+    }
+
+    return {"student": email, "activities": activity_summary}
