@@ -6,6 +6,8 @@ A super simple FastAPI application that allows students to view and sign up for 
 
 - View all available extracurricular activities
 - Sign up for activities
+- View active notice board announcements
+- Admin CRUD for moderated notices
 
 ## Getting Started
 
@@ -31,6 +33,11 @@ A super simple FastAPI application that allows students to view and sign up for 
 | ------ | ----------------------------------------------------------------- | ------------------------------------------------------------------- |
 | GET    | `/activities`                                                     | Get all activities with their details and current participant count |
 | POST   | `/activities/{activity_name}/signup?email=student@mergington.edu` | Sign up for an activity                                             |
+| GET    | `/notices`                                                        | Get notices active for the current date                             |
+| GET    | `/admin/notices`                                                  | Get all notices (requires `x-admin-token` header)                  |
+| POST   | `/admin/notices`                                                  | Create notice (requires `x-admin-token` header)                    |
+| PUT    | `/admin/notices/{notice_id}`                                      | Edit notice (requires `x-admin-token` header)                      |
+| DELETE | `/admin/notices/{notice_id}`                                      | Delete notice (requires `x-admin-token` header)                    |
 
 ## Data Model
 

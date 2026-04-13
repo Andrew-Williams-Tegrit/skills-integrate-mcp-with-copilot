@@ -1,8 +1,50 @@
 document.addEventListener("DOMContentLoaded", () => {
   const activitiesList = document.getElementById("activities-list");
+  const noticesList = document.getElementById("notices-list");
   const activitySelect = document.getElementById("activity");
   const signupForm = document.getElementById("signup-form");
   const messageDiv = document.getElementById("message");
+
+  function formatNoticeDate(dateText) {
+    return new Date(`${dateText}T00:00:00`).toLocaleDateString();
+  }
+
+  async function fetchNotices() {
+    try {
+      const response = await fetch("/notices");
+      const notices = await response.json();
+
+      noticesList.innerHTML = "";
+
+      if (notices.length === 0) {
+        noticesList.innerHTML = "<p><em>No active notices right now.</em></p>";
+        return;
+      }
+
+      notices.forEach((notice) => {
+        const noticeCard = document.createElement("div");
+        noticeCard.className = "notice-card";
+
+        const noticeLink = notice.link
+          ? `<p><a class="notice-link" href="${notice.link}" target="_blank" rel="noopener noreferrer">More details</a></p>`
+          : "";
+
+        noticeCard.innerHTML = `
+          <h4>${notice.title}</h4>
+          <p>${notice.body}</p>
+          <p><strong>Active:</strong> ${formatNoticeDate(
+            notice.start_date
+          )} - ${formatNoticeDate(notice.end_date)}</p>
+          ${noticeLink}
+        `;
+        noticesList.appendChild(noticeCard);
+      });
+    } catch (error) {
+      noticesList.innerHTML =
+        "<p>Failed to load notices. Please try again later.</p>";
+      console.error("Error fetching notices:", error);
+    }
+  }
 
   // Function to fetch activities from API
   async function fetchActivities() {
@@ -156,5 +198,6 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   // Initialize app
+  fetchNotices();
   fetchActivities();
 });
